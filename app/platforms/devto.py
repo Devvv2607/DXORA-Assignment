@@ -38,6 +38,15 @@ class DevtoPlatform(BasePlatform):
             }
         }
 
+    def _headers(self) -> dict[str, str]:
+        return {"api-key": self.env("DEVTO_API_KEY") or "", "Accept": "application/vnd.forem.api-v1+json"}
+
+    async def check_credentials(self, client: httpx.AsyncClient) -> str | None:
+        """GET /api/users/me (200 with a valid api-key, 401 otherwise)."""
+        response = await self._send(client, "GET", "https://dev.to/api/users/me", idempotent=True, headers=self._headers())
+        self._json(response, self.name)
+        return None
+
     async def publish(
         self, client: httpx.AsyncClient, message: str, link: str, *, idempotency_key: str | None = None
     ) -> PostOutcome:
@@ -45,10 +54,7 @@ class DevtoPlatform(BasePlatform):
             client,
             "POST",
             "https://dev.to/api/articles",
-            headers={
-                "api-key": self.env("DEVTO_API_KEY"),
-                "Accept": "application/vnd.forem.api-v1+json",
-            },
+            headers=self._headers(),
             json=self.build_article(message, link),
         )
         data = self._json(response, self.name)

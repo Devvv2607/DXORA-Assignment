@@ -475,3 +475,158 @@ async def test_public_check_never_fetches_unlisted_host(client, mock_http) -> No
 )
 def test_is_allowed_url(url: str, allowed: bool) -> None:
     assert public_check.is_allowed_url(url, {"gist.github.com"}) is allowed
+
+
+# ------------------------------------------------------------------ check_credentials (read-only, never posts)
+
+TG_API = f"https://api.telegram.org/bot{FAKE_TELEGRAM_TOKEN}"
+PUBLISH_ENDPOINTS = ("/api/v1/statuses", "createRecord", "sendMessage", "/api/articles", "/gists")
+
+
+def mock_credential_endpoints(mock_http, *, gist_scopes: str | None = "gist, read:user") -> None:
+    mock_http.get("https://mastodon.example/api/v1/accounts/verify_credentials").mock(
+        return_value=httpx.Response(200, json={"id": "1", "username": "me"})
+    )
+    mock_http.post(BSKY_SESSION).mock(
+        return_value=httpx.Response(200, json={"accessJwt": "jwt", "did": "did:plc:abc123", "handle": "tester.bsky.social"})
+    )
+    mock_http.get(f"{TG_API}/getMe").mock(return_value=httpx.Response(200, json={"ok": True, "result": {"id": 42}}))
+    mock_http.get(f"{TG_API}/getChat").mock(
+        return_value=httpx.Response(200, json={"ok": True, "result": {"id": -100, "type": "channel", "username": "test_channel"}})
+    )
+    mock_http.get(f"{TG_API}/getChatMember").mock(
+        return_value=httpx.Response(200, json={"ok": True, "result": {"status": "administrator", "can_post_messages": True}})
+    )
+    mock_http.get("https://dev.to/api/users/me").mock(return_value=httpx.Response(200, json={"id": 1, "username": "me"}))
+    headers = {"x-oauth-scopes": gist_scopes} if gist_scopes is not None else {}
+    mock_http.get("https://api.github.com/user").mock(return_value=httpx.Response(200, headers=headers, json={"login": "me"}))
+
+
+async def test_check_credentials_is_read_only_for_all_core_platforms(settings, client, mock_http) -> None:
+    mock_credential_endpoints(mock_http)
+    for cls in (MastodonPlatform, BlueskyPlatform, TelegramPlatform, DevtoPlatform, GistPlatform):
+        assert await cls(settings).check_credentials(client) is None
+    for call in mock_http.calls:
+        url = str(call.request.url).split("?")[0]
+        assert not any(url.endswith(p) for p in PUBLISH_ENDPOINTS), url
+        # Every call is a GET, except the Bluesky createSession login (which creates no record).
+        assert call.request.method == "GET" or url.endswith("com.atproto.server.createSession"), url
+
+
+async def test_mastodon_check_credentials_request_and_401(settings, client, mock_http) -> None:
+    route = mock_http.get("https://mastodon.example/api/v1/accounts/verify_credentials").mock(
+        return_value=httpx.Response(401, json={"error": "The access token is invalid"})
+    )
+    with pytest.raises(PlatformError) as exc_info:
+        await MastodonPlatform(settings).check_credentials(client)
+    assert exc_info.value.code is ErrorCode.AUTH_FAILED
+    assert route.calls[0].request.headers["Authorization"] == "Bearer fake-mastodon-token"
+
+
+async def test_bluesky_check_credentials_logs_in_only(settings, client, mock_http) -> None:
+    mock_credential_endpoints(mock_http)
+    create = mock_http.post(BSKY_CREATE)
+    await BlueskyPlatform(settings).check_credentials(client)
+    assert not create.called
+
+
+async def test_telegram_check_credentials_requires_admin(settings, client, mock_http) -> None:
+    mock_credential_endpoints(mock_http)
+    mock_http.get(f"{TG_API}/getChatMember").mock(
+        return_value=httpx.Response(200, json={"ok": True, "result": {"status": "left"}})
+    )
+    with pytest.raises(PlatformError) as exc_info:
+        await TelegramPlatform(settings).check_credentials(client)
+    assert exc_info.value.code is ErrorCode.AUTH_FAILED
+    assert "not an administrator" in str(exc_info.value)
+    member_call = mock_http.calls[-1].request
+    assert member_call.url.params["chat_id"] == "@test_channel"
+    assert member_call.url.params["user_id"] == "42"
+
+
+async def test_telegram_check_credentials_admin_without_post_permission(settings, client, mock_http) -> None:
+    mock_credential_endpoints(mock_http)
+    mock_http.get(f"{TG_API}/getChatMember").mock(
+        return_value=httpx.Response(200, json={"ok": True, "result": {"status": "administrator", "can_post_messages": False}})
+    )
+    with pytest.raises(PlatformError) as exc_info:
+        await TelegramPlatform(settings).check_credentials(client)
+    assert "cannot post" in str(exc_info.value)
+
+
+async def test_telegram_check_credentials_rejects_non_channel(settings, client, mock_http) -> None:
+    mock_credential_endpoints(mock_http)
+    mock_http.get(f"{TG_API}/getChat").mock(
+        return_value=httpx.Response(200, json={"ok": True, "result": {"id": 1, "type": "supergroup", "username": "g"}})
+    )
+    with pytest.raises(PlatformError) as exc_info:
+        await TelegramPlatform(settings).check_credentials(client)
+    assert exc_info.value.code is ErrorCode.BAD_REQUEST
+
+
+async def test_telegram_check_credentials_bad_token_never_leaks(settings, client, mock_http) -> None:
+    register_secrets(settings.secret_values())
+    mock_http.get(f"{TG_API}/getMe").mock(
+        return_value=httpx.Response(401, json={"ok": False, "error_code": 401, "description": "Unauthorized"})
+    )
+    with pytest.raises(PlatformError) as exc_info:
+        await TelegramPlatform(settings).check_credentials(client)
+    assert exc_info.value.code is ErrorCode.AUTH_FAILED
+    assert FAKE_TELEGRAM_TOKEN not in str(exc_info.value)
+
+
+async def test_devto_check_credentials_headers(settings, client, mock_http) -> None:
+    mock_credential_endpoints(mock_http)
+    await DevtoPlatform(settings).check_credentials(client)
+    request = mock_http.calls[-1].request
+    assert request.headers["api-key"] == "fake-devto-key"
+    assert request.headers["Accept"] == "application/vnd.forem.api-v1+json"
+
+
+@pytest.mark.parametrize("scopes", ["gist, read:user", "gist"])
+async def test_gist_check_credentials_classic_token_with_gist_scope(settings, client, mock_http, scopes) -> None:
+    mock_credential_endpoints(mock_http, gist_scopes=scopes)
+    assert await GistPlatform(settings).check_credentials(client) is None
+
+
+async def test_gist_check_credentials_fine_grained_token_returns_note(settings, client, mock_http) -> None:
+    mock_credential_endpoints(mock_http, gist_scopes=None)
+    note = await GistPlatform(settings).check_credentials(client)
+    assert note is not None
+    assert "fine-grained" in note
+
+
+async def test_gist_check_credentials_missing_gist_scope(settings, client, mock_http) -> None:
+    mock_credential_endpoints(mock_http, gist_scopes="repo, read:user")
+    with pytest.raises(PlatformError) as exc_info:
+        await GistPlatform(settings).check_credentials(client)
+    assert exc_info.value.code is ErrorCode.AUTH_FAILED
+    assert "gist" in str(exc_info.value)
+
+
+# ------------------------------------------------------------------ scripts/check_credentials.py
+
+
+def load_script(name: str):
+    import importlib.util
+    from pathlib import Path
+
+    path = Path(__file__).resolve().parent.parent / "scripts" / f"{name}.py"
+    spec = importlib.util.spec_from_file_location(f"script_{name}", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+async def test_check_credentials_script_reports_each_platform(make_settings, client, mock_http) -> None:
+    script = load_script("check_credentials")
+    mock_credential_endpoints(mock_http)
+    mock_http.get("https://dev.to/api/users/me").mock(return_value=httpx.Response(401, json={"error": "unauthorized"}))
+    settings = make_settings(github_token=None, enabled_platforms="mastodon,devto,gist,wordpress")
+    rows = await script.run_checks(get_enabled_platforms(settings), client)
+    assert rows[0] == ("Mastodon", True, "OK")
+    assert rows[1][1] is False
+    assert rows[1][2].startswith("AUTH_FAILED:")
+    assert rows[2] == ("GitHub Gist", False, "NOT_CONFIGURED: missing GITHUB_TOKEN")
+    assert rows[3][2].startswith("NOT_CONFIGURED")  # optional adapter without credentials
+    assert all(call.request.method == "GET" for call in mock_http.calls)

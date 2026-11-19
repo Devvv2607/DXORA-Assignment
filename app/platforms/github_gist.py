@@ -14,6 +14,27 @@ class GistPlatform(BasePlatform):
     required_env = ["GITHUB_TOKEN"]
     expected_hosts = {"gist.github.com"}
 
+    def _headers(self) -> dict[str, str]:
+        return {
+            "Authorization": f"Bearer {self.env('GITHUB_TOKEN')}",
+            "Accept": "application/vnd.github+json",
+            "X-GitHub-Api-Version": "2022-11-28",
+        }
+
+    async def check_credentials(self, client: httpx.AsyncClient) -> str | None:
+        """GET /user; for classic tokens also require the `gist` scope in X-OAuth-Scopes."""
+        response = await self._send(client, "GET", "https://api.github.com/user", idempotent=True, headers=self._headers())
+        self._json(response, self.name)
+        scopes_header = response.headers.get("x-oauth-scopes")
+        if scopes_header is None:
+            # Fine-grained tokens do not send X-OAuth-Scopes; the required "Gists: write" user permission
+            # cannot be confirmed without creating a gist.
+            return "fine-grained token: confirm the 'Gists' account permission is set to Read and write"
+        scopes = {scope.strip() for scope in scopes_header.split(",") if scope.strip()}
+        if "gist" not in scopes:
+            raise PlatformError(ErrorCode.AUTH_FAILED, "GitHub token is valid but lacks the 'gist' scope")
+        return None
+
     async def publish(
         self, client: httpx.AsyncClient, message: str, link: str, *, idempotency_key: str | None = None
     ) -> PostOutcome:
@@ -21,11 +42,7 @@ class GistPlatform(BasePlatform):
             client,
             "POST",
             "https://api.github.com/gists",
-            headers={
-                "Authorization": f"Bearer {self.env('GITHUB_TOKEN')}",
-                "Accept": "application/vnd.github+json",
-                "X-GitHub-Api-Version": "2022-11-28",
-            },
+            headers=self._headers(),
             json={
                 "description": derive_title(message, link, max_length=120),
                 "public": True,

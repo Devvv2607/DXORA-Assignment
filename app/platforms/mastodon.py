@@ -55,6 +55,18 @@ class MastodonPlatform(BasePlatform):
             raise PlatformError(ErrorCode.INVALID_RESPONSE, "Mastodon response did not include id/url; the post may exist")
         return PostOutcome(posted_url=url, platform_id=status_id, extra={"visibility": data.get("visibility")})
 
+    async def check_credentials(self, client: httpx.AsyncClient) -> str | None:
+        """GET /api/v1/accounts/verify_credentials (needs scope `profile` or `read:accounts`)."""
+        response = await self._send(
+            client,
+            "GET",
+            f"{self.base_url}/api/v1/accounts/verify_credentials",
+            idempotent=True,
+            headers={"Authorization": f"Bearer {self.env('MASTODON_ACCESS_TOKEN')}"},
+        )
+        self._json(response, self.name)
+        return None
+
     async def verify_public(self, client: httpx.AsyncClient, outcome: PostOutcome) -> bool:
         """Unauthenticated API read; falls back to the public page if the instance requires auth for the API."""
         api_url = f"{self.base_url}/api/v1/statuses/{quote(outcome.platform_id, safe='')}"

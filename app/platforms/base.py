@@ -109,6 +109,14 @@ class BasePlatform(ABC):
             retry_delay=self.settings.verify_retry_delay_seconds,
         )
 
+    async def check_credentials(self, client: httpx.AsyncClient) -> str | None:
+        """Make one read-only authenticated call. Never posts.
+
+        Raises :class:`PlatformError` if the credentials are rejected. Returns ``None``, or a short note when the
+        check passed but something could not be confirmed read-only (shown as ``OK (<note>)``).
+        """
+        raise NotImplementedError(f"{self.name} has no read-only credential check")
+
     # --- shared HTTP plumbing ----------------------------------------------------------------
     def _extract_error(self, response: httpx.Response) -> tuple[str | None, str | None]:
         """Return (human message, api error code) from an error response body. Override per platform."""

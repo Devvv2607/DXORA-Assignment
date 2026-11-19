@@ -159,6 +159,12 @@ class BlueskyPlatform(BasePlatform):
             extra={"cid": data.get("cid")},
         )
 
+    async def check_credentials(self, client: httpx.AsyncClient) -> str | None:
+        """com.atproto.server.createSession: creates a login session only, never a record."""
+        async with self._lock:
+            self._session = await self._login(client)
+        return None
+
     async def verify_public(self, client: httpx.AsyncClient, outcome: PostOutcome) -> bool:
         """bsky.app is a client-rendered SPA (200 for anything), so ask the public AppView instead."""
         url = f"{PUBLIC_APPVIEW}/xrpc/app.bsky.feed.getPosts?uris={quote(outcome.platform_id, safe='')}"

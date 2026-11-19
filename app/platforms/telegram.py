@@ -79,6 +79,39 @@ class TelegramPlatform(BasePlatform):
             extra={"channel": username},
         )
 
+    async def _call(self, client: httpx.AsyncClient, method: str, **params: object) -> dict:
+        """Read-only Bot API call (GET with query parameters). Returns ``result``."""
+        response = await self._send(
+            client,
+            "GET",
+            f"https://api.telegram.org/bot{self.env('TELEGRAM_BOT_TOKEN')}/{method}",
+            idempotent=True,
+            params=params or None,
+        )
+        data = self._json(response, self.name)
+        if not data.get("ok") or not isinstance(data.get("result"), dict):
+            raise PlatformError(ErrorCode.INVALID_RESPONSE, f"Telegram {method} returned an unexpected response")
+        return data["result"]
+
+    async def check_credentials(self, client: httpx.AsyncClient) -> str | None:
+        """getMe -> getChat(@channel) -> getChatMember(bot): token valid, channel public, bot can post."""
+        channel = self.channel
+        bot = await self._call(client, "getMe")
+        chat = await self._call(client, "getChat", chat_id=f"@{channel}")
+        if chat.get("type") != "channel":
+            raise PlatformError(ErrorCode.BAD_REQUEST, f"@{channel} is a {chat.get('type')!s}, not a channel")
+        if not chat.get("username"):
+            raise PlatformError(ErrorCode.BAD_REQUEST, f"@{channel} is not a public channel (no username)")
+        member = await self._call(client, "getChatMember", chat_id=f"@{channel}", user_id=bot.get("id"))
+        status = member.get("status")
+        if status == "creator":
+            return None
+        if status != "administrator":
+            raise PlatformError(ErrorCode.AUTH_FAILED, f"the bot is not an administrator of @{channel} (status: {status})")
+        if member.get("can_post_messages") is False:
+            raise PlatformError(ErrorCode.AUTH_FAILED, f"the bot is an administrator of @{channel} but cannot post messages")
+        return None
+
     async def verify_public(self, client: httpx.AsyncClient, outcome: PostOutcome) -> bool:
         """t.me/<channel>/<id> returns 200 even for missing ids, so check the public web preview instead."""
         channel = outcome.extra.get("channel") or self.channel
