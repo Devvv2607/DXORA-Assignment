@@ -53,14 +53,14 @@
 
 ## Overview
 
-A FastAPI service that takes **one short message containing exactly one CTA link** and publishes it to several
-third-party platforms through their **official APIs**. Each platform is reported independently, and one failing
-platform never blocks the others. Every successful post is then checked **anonymously** to confirm it is publicly
-reachable.
+Publishing the same announcement by hand to several platforms is slow and error-prone. This FastAPI service takes
+**one short message containing exactly one CTA link**, validates it strictly, and publishes it in a single request
+through each platform's **official API**: **Mastodon, Bluesky, Telegram (public channel), Dev.to and GitHub Gist**.
+All platforms run concurrently and in isolation, so one failure never blocks the others. The response lists every
+enabled platform separately with its `status`, `posted_url`, a **real anonymous `public_access` check**, the
+publication `date`/`time`, and a coded `error`, plus a `summary` of succeeded and failed counts.
 
 - Stack: Python 3.11+, FastAPI, Pydantic v2, pydantic-settings, async HTTPX, pytest + respx, ruff
-
----
 
 ---
 
