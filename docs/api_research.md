@@ -14,13 +14,15 @@ If a page could not be fetched, the row says **NOT CHECKED**.
 | **Dev.to (Forem)** | [API v1 reference](https://developers.forem.com/api/v1) · [OpenAPI YAML](https://developers.forem.com/redocusaurus/plugin-redoc-1.yaml) · [Forem team post on v1 + Accept header](https://dev.to/devteam/documenting-the-forem-v1-api-15ck) | 2026-11-19 | Header `api-key` (security scheme `apiKey`, in header); `Accept: application/vnd.forem.api-v1+json` ("If you do not pass along an Accept header you will automatically be routed to v0") | `POST /api/articles`: `article` {`title`, `body_markdown`, `published` (default false), `tags`}. **`tags` is `type: string`, "A comma-separated list of tags (up to 4 tags)"**. Credential check: `GET /api/users/me` (200/401) | 201 response "An Article" (schema not expanded); `id` and `url` appear in article response samples, and the adapter reads `url` | **Not documented** (no rate limit / 429 in the reference) | `tags` changed from array to a comma-separated string, per the v1 schema. The Accept value is only in the Forem team's post, not the reference page. |
 | **GitHub Gist** | [Create a gist](https://docs.github.com/en/rest/gists/gists?apiVersion=2022-11-28#create-a-gist) · [API versions](https://docs.github.com/en/rest/about-the-rest-api/api-versions) · [rate limits](https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api) · [OAuth scopes](https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/scopes-for-oauth-apps) · [fine-grained permissions](https://docs.github.com/en/rest/authentication/permissions-required-for-fine-grained-personal-access-tokens) | 2026-11-19 | `Authorization: Bearer <token>`; classic token scope `gist` ("Grants write access to gists"); fine-grained: **user permission "Gists" (write)** for `POST /gists` | `POST /gists`: `description`, `public`, `files` {name: {`content`}}; headers `Accept: application/vnd.github+json`, `X-GitHub-Api-Version` | 201 response `html_url` (also `id`) | 5,000 req/hour (authenticated); secondary: ≤ 80 content-creating requests/min, ≤ 500/hour; exceeding either gives "403 or 429", with `retry-after` / `x-ratelimit-remaining` / `x-ratelimit-reset` | A 403 with `retry-after` is now `RATE_LIMITED`. `X-GitHub-Api-Version: 2022-11-28` is kept: still supported until **2028-03-10** and is the default; a newer `2026-03-10` exists. `X-OAuth-Scopes` is documented for OAuth/classic tokens; the fine-grained docs describe `X-Accepted-GitHub-Permissions` instead. |
 
-## Optional adapter checked
+## Optional adapters (disabled by default; not part of the live run)
 
 | Platform | Doc URL | Checked | Finding | Change |
 |---|---|---|---|---|
 | **LinkedIn** (version header only) | [Versioning](https://learn.microsoft.com/en-us/linkedin/marketing/versioning) (page updated 2026-11-16) | 2026-11-19 | Header `Linkedin-Version: YYYYMM`; monthly releases "supported … for a minimum of one year"; latest is **202611**; doc monikers list 202601–202611; 202601 sunsets 2027-01-15; deprecated versions return an error | Default `LINKEDIN_VERSION` changed from `202510` to **`202611`** |
+| **LinkedIn** (Posts API: endpoint, body, `x-restli-id`) | – | **NOT CHECKED** | – | – |
+| **WordPress** | – | **NOT CHECKED** | – | – |
+| **Discord** | – | **NOT CHECKED** | – | – |
 
-WordPress and Discord were not re-checked in this pass. They are optional, disabled by default, and not part of the live run.
 
 ## Notes on how pages were read
 
