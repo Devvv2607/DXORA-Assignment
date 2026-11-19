@@ -98,12 +98,16 @@ password, with no app review).
 | **Facebook / Instagram** | Rejected | Require Meta app review, business accounts and page permissions |
 | **Reddit** | Rejected | API terms and anti-spam rules make automated promotional posting inappropriate |
 
-> **API docs.** Every adapter links its official documentation in its module docstring. Endpoints and fields follow
-> those docs. Two points where the docs required something beyond the brief:
-> 1. Telegram reports rate limits in the JSON body (`parameters.retry_after`) rather than only the header.
-> 2. GitHub signals rate limits as **403** with `x-ratelimit-remaining: 0`.
->
-> Both are mapped to `RATE_LIMITED`.
+> **API docs.** The current official docs for each platform were checked on 2026-11-19. The full table, with doc
+> URLs, auth, request fields, response field used for `posted_url`, and rate limits, is in
+> [`docs/api_research.md`](docs/api_research.md). Where the docs differed from the original brief, the code follows the docs:
+> 1. **Dev.to `tags`** is a comma-separated *string* in the Forem v1 schema, not an array.
+> 2. **GitHub** returns *both* primary and secondary rate limits as 403 **or** 429. A 403 with `x-ratelimit-remaining: 0`
+>    or a `retry-after` header is mapped to `RATE_LIMITED`, not `AUTH_FAILED`.
+> 3. **Bluesky** enforces `maxLength: 3000` UTF-8 bytes in addition to 300 graphemes.
+> 4. **Mastodon** `verify_credentials` needs the `profile` (or `read:accounts`) scope, so the token needs `write:statuses` + `profile`.
+> 5. **LinkedIn** `LINKEDIN_VERSION` defaults to `202611`, the latest listed version. The old `202510` default falls outside the listed active versions.
+> 6. Telegram reports flood control in the JSON body (`parameters.retry_after`), which is read for `RATE_LIMITED`.
 
 ---
 
@@ -114,7 +118,8 @@ Use **dedicated test accounts**. Put the values in `.env`, which is git-ignored;
 ### Mastodon
 1. Create a test account on an instance (e.g. <https://mastodon.social>).
 2. Go to **Preferences → Development → New application** (`<instance>/settings/applications`).
-3. Grant only the `write:statuses` scope (`read:statuses` is not needed). Save, then copy **Your access token**.
+3. Grant the scopes `write:statuses` (to post) and `profile` (read-only, used by `scripts/check_credentials.py` via
+   `verify_credentials`). Save, then copy **Your access token**.
 4. Set `MASTODON_BASE_URL=https://<instance>` and `MASTODON_ACCESS_TOKEN=...`.
 
 ### Bluesky

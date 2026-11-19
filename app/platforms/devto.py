@@ -34,7 +34,7 @@ class DevtoPlatform(BasePlatform):
                 "title": derive_title(message, link),
                 "body_markdown": message,
                 "published": True,
-                "tags": clean_tags(self.settings.devto_tag_list),
+                "tags": ",".join(clean_tags(self.settings.devto_tag_list)),  # Forem v1: comma-separated string
             }
         }
 

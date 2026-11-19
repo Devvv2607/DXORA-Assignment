@@ -67,7 +67,7 @@ class Settings(BaseSettings):
 
     linkedin_access_token: SecretStr | None = None
     linkedin_author_urn: str | None = None
-    linkedin_version: str = "202510"
+    linkedin_version: str = "202611"  # latest per LinkedIn versioning docs (checked 2026-11-19)
 
     discord_webhook_url: SecretStr | None = None
     discord_guild_id: str | None = None

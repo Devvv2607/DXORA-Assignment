@@ -147,7 +147,11 @@ class BasePlatform(ABC):
         suffix = f": {detail}" if detail else ""
         common = {"status_code": status, "api_code": api_code}
 
-        rate_limited = status == 429 or (status == 403 and response.headers.get("x-ratelimit-remaining") == "0")
+        # GitHub documents primary *and* secondary rate limits as "403 or 429"; a 403 is a rate limit when it
+        # says so via x-ratelimit-remaining: 0 or a retry-after header.
+        rate_limited = status == 429 or (
+            status == 403 and (response.headers.get("x-ratelimit-remaining") == "0" or "retry-after" in response.headers)
+        )
         if rate_limited:
             retry_after = self._retry_after(response)
             hint = f"; retry after {int(retry_after)}s" if retry_after is not None else ""

@@ -121,6 +121,18 @@ def test_bluesky_facets_use_utf8_byte_offsets() -> None:
     assert facets[0]["features"] == [{"$type": "app.bsky.richtext.facet#link", "uri": LINK}]
 
 
+async def test_bluesky_rejects_text_over_3000_bytes_without_network(settings, client, mock_http) -> None:
+    """Lexicon app.bsky.feed.post#text: maxLength 3000 (bytes) in addition to maxGraphemes 300."""
+    text = "👨‍👩‍👧" * 150 + " " + LINK  # 151 graphemes, 2,739+ bytes
+    big = text + " " + "👨‍👩‍👧" * 20
+    assert count_graphemes(big) <= 300
+    assert len(big.encode()) > 3000
+    with pytest.raises(PlatformError) as exc_info:
+        await BlueskyPlatform(settings).publish(client, big, LINK)
+    assert exc_info.value.code is ErrorCode.CONTENT_TOO_LONG
+    assert len(mock_http.calls) == 0
+
+
 def test_grapheme_count() -> None:
     assert count_graphemes("abc") == 3
     assert count_graphemes("é") == 1  # e + combining acute
@@ -307,7 +319,7 @@ async def test_devto_request_and_parsing(make_settings, client, mock_http) -> No
     assert article["published"] is True
     assert article["body_markdown"] == MESSAGE
     assert LINK not in article["title"]
-    assert article["tags"] == ["automation", "api", "python", "fastapi"]
+    assert article["tags"] == "automation,api,python,fastapi"  # Forem v1 schema: comma-separated string
     assert outcome.posted_url == "https://dev.to/me/check-out-99"
 
 
@@ -336,6 +348,29 @@ async def test_gist_request_and_parsing(settings, client, mock_http) -> None:
     assert sent["public"] is True
     assert sent["files"] == {"message.md": {"content": MESSAGE}}
     assert outcome.posted_url == "https://gist.github.com/me/abc"
+
+
+async def test_gist_secondary_rate_limit_403_with_retry_after(make_settings, client, mock_http) -> None:
+    """GitHub docs: secondary limits return 403 or 429; a 403 secondary limit carries retry-after."""
+    settings = make_settings(max_retries=0)
+    mock_http.post("https://api.github.com/gists").mock(
+        return_value=httpx.Response(
+            403, headers={"retry-after": "60"}, json={"message": "You have exceeded a secondary rate limit"}
+        )
+    )
+    with pytest.raises(PlatformError) as exc_info:
+        await GistPlatform(settings).publish(client, MESSAGE, LINK)
+    assert exc_info.value.code is ErrorCode.RATE_LIMITED
+    assert exc_info.value.retry_after == 60
+
+
+async def test_gist_plain_403_is_auth_failed(make_settings, client, mock_http) -> None:
+    mock_http.post("https://api.github.com/gists").mock(
+        return_value=httpx.Response(403, json={"message": "Resource not accessible"})
+    )
+    with pytest.raises(PlatformError) as exc_info:
+        await GistPlatform(make_settings(max_retries=0)).publish(client, MESSAGE, LINK)
+    assert exc_info.value.code is ErrorCode.AUTH_FAILED
 
 
 async def test_gist_rate_limit_403(make_settings, client, mock_http) -> None:

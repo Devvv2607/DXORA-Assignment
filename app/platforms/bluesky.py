@@ -20,7 +20,8 @@ from app.core.timeutil import utc_iso_now
 from app.platforms.base import BasePlatform, PostOutcome
 from app.services import public_check
 
-BLUESKY_MAX_GRAPHEMES = 300
+BLUESKY_MAX_GRAPHEMES = 300  # lexicon app.bsky.feed.post#text maxGraphemes
+BLUESKY_MAX_BYTES = 3000  # lexicon app.bsky.feed.post#text maxLength (UTF-8 bytes)
 PUBLIC_APPVIEW = "https://public.api.bsky.app"
 _REAUTH_ERRORS = {"ExpiredToken", "InvalidToken", "AuthenticationRequired", "AuthMissing"}
 
@@ -128,6 +129,8 @@ class BlueskyPlatform(BasePlatform):
     ) -> PostOutcome:
         if count_graphemes(message) > BLUESKY_MAX_GRAPHEMES:
             raise PlatformError(ErrorCode.CONTENT_TOO_LONG, f"Bluesky allows at most {BLUESKY_MAX_GRAPHEMES} graphemes")
+        if len(message.encode("utf-8")) > BLUESKY_MAX_BYTES:
+            raise PlatformError(ErrorCode.CONTENT_TOO_LONG, f"Bluesky allows at most {BLUESKY_MAX_BYTES} bytes of text")
         record = {
             "$type": "app.bsky.feed.post",
             "text": message,
