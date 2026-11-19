@@ -309,3 +309,39 @@ def test_log_lines_for_request_redacts_again(tmp_path) -> None:
     lines = script.log_lines_for_request(log_file, "r1")
     assert len(lines) == 1
     assert "abc.def.ghi" not in lines[0]
+
+
+# ------------------------------------------------------------------ legacy cleanup guards
+
+
+def test_route_set_is_exactly_the_contract() -> None:
+    from fastapi.routing import APIRoute
+
+    app = create_app(build_settings())
+    api_routes = {(method, route.path) for route in app.routes if isinstance(route, APIRoute) for method in route.methods}
+    assert api_routes == {("POST", "/posting"), ("GET", "/health"), ("GET", "/platforms")}
+    docs_routes = {route.path for route in app.routes if not isinstance(route, APIRoute)}
+    assert docs_routes == {"/openapi.json", "/docs", "/docs/oauth2-redirect", "/redoc"}
+
+
+async def test_legacy_routes_are_gone() -> None:
+    async with api() as client:
+        for path in ("/v1/publish", "/v1/verify"):
+            response = await client.post(path, json={})
+            assert response.status_code == 404
+
+
+def test_legacy_env_names_are_not_settings() -> None:
+    from app.config import Settings
+
+    fields = {name.upper() for name in Settings.model_fields}
+    legacy = {
+        "MASTODON_TOKEN",
+        "BLUESKY_TOKEN",
+        "BLUESKY_API_URL",
+        "TELEGRAM_CHAT_ID",
+        "DEVTO_API_URL",
+        "VERIFICATION_ALLOWED_HOSTS",
+    }
+    assert fields.isdisjoint(legacy)
+    assert {"MASTODON_ACCESS_TOKEN", "TELEGRAM_CHANNEL_USERNAME"} <= fields
