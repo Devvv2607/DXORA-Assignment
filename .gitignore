@@ -30,3 +30,6 @@ prompt.md
 PROMPT.md
 original_backup/
 *_backup/
+
+# local server logs (LOG_FILE); curated per-run .log files live in docs/evidence/
+logs/

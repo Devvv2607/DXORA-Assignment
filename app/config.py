@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     # --- Application -------------------------------------------------------------------------
     app_name: str = "Automated Multi-Platform Posting API"
     log_level: str = "INFO"
+    log_file: str | None = None  # optional: also append JSON logs here (used by scripts/live_run.py)
     app_timezone: str = "UTC"
     enabled_platforms: str = DEFAULT_ENABLED_PLATFORMS
     dry_run: bool = False

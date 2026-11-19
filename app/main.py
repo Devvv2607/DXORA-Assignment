@@ -115,7 +115,7 @@ def _build_http_client(settings: Settings) -> httpx.AsyncClient:
 
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or get_settings()
-    configure_logging(settings.log_level)
+    configure_logging(settings.log_level, settings.log_file)
     register_secrets(settings.secret_values())
     platforms = get_enabled_platforms(settings)  # fail fast on ENABLED_PLATFORMS typos
 

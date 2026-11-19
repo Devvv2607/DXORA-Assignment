@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+import re
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from typing import Any
@@ -233,3 +235,77 @@ async def test_openapi_docs_available() -> None:
         schema = (await client.get("/openapi.json")).json()
     assert docs.status_code == 200
     assert "/posting" in schema["paths"]
+
+
+# ------------------------------------------------------------------ LOG_FILE + scripts/live_run.py
+
+
+def _load_live_run():
+    import importlib.util
+    from pathlib import Path
+
+    path = Path(__file__).resolve().parent.parent / "scripts" / "live_run.py"
+    spec = importlib.util.spec_from_file_location("script_live_run", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+async def test_live_run_saves_response_and_request_log_lines(tmp_path) -> None:
+    script = _load_live_run()
+    log_file = tmp_path / "logs" / "server.log"
+    out_dir = tmp_path / "evidence"
+    app = create_app(build_settings(dry_run=True, log_file=str(log_file)))
+    async with app.router.lifespan_context(app):
+        transport = httpx.ASGITransport(app=app)
+        # An unrelated request: its log lines must NOT end up in the evidence log.
+        async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as other:
+            await other.get("/health", headers={"X-Request-ID": "unrelated-request"})
+        status, json_path, log_path = await script.live_run(
+            "dry_check", "http://testserver", log_file=log_file, out_dir=out_dir, transport=transport
+        )
+
+    assert status == 200
+    assert json_path.parent == out_dir
+    assert re.fullmatch(r"dry_check_\d{8}T\d{6}Z\.json", json_path.name)
+    saved = json.loads(json_path.read_text(encoding="utf-8"))
+    assert saved["success"] is False  # DRY_RUN never fakes success
+    assert {r["error"] for r in saved["results"]} == {"DRY_RUN: not published"}
+
+    assert log_path is not None
+    assert log_path.name == json_path.with_suffix(".log").name
+    lines = [json.loads(line) for line in log_path.read_text(encoding="utf-8").splitlines()]
+    request_ids = {line["request_id"] for line in lines}
+    assert len(request_ids) == 1
+    assert request_ids.pop().startswith("live-")
+    assert {line["event"] for line in lines} >= {"posting_started", "platform_result", "http_request"}
+    assert "unrelated-request" not in log_path.read_text(encoding="utf-8")
+    assert FAKE_TELEGRAM_TOKEN not in log_path.read_text(encoding="utf-8")
+
+
+async def test_live_run_without_log_file_saves_json_only(tmp_path) -> None:
+    script = _load_live_run()
+    app = create_app(build_settings(dry_run=True))
+    async with app.router.lifespan_context(app):
+        status, json_path, log_path = await script.live_run(
+            "nolog", "http://testserver", log_file=None, out_dir=tmp_path, transport=httpx.ASGITransport(app=app)
+        )
+    assert status == 200
+    assert json_path.exists()
+    assert log_path is None
+
+
+async def test_live_run_rejects_unsafe_label(tmp_path) -> None:
+    script = _load_live_run()
+    with pytest.raises(ValueError, match="label"):
+        await script.live_run("../../etc", "http://testserver", log_file=None, out_dir=tmp_path)
+
+
+def test_log_lines_for_request_redacts_again(tmp_path) -> None:
+    script = _load_live_run()
+    log_file = tmp_path / "server.log"
+    secret_line = json.dumps({"request_id": "r1", "event": "x", "detail": "Authorization: Bearer abc.def.ghi"})
+    log_file.write_text(secret_line + "\n" + json.dumps({"request_id": "r2", "event": "y"}) + "\nnot json\n", encoding="utf-8")
+    lines = script.log_lines_for_request(log_file, "r1")
+    assert len(lines) == 1
+    assert "abc.def.ghi" not in lines[0]

@@ -9,6 +9,7 @@ import sys
 import uuid
 from contextvars import ContextVar
 from datetime import UTC, datetime
+from pathlib import Path
 
 request_id_var: ContextVar[str] = ContextVar("request_id", default="-")
 
@@ -87,11 +88,20 @@ class JsonFormatter(logging.Formatter):
         return redact(json.dumps(payload, default=str, ensure_ascii=True))
 
 
-def configure_logging(level: str = "INFO") -> None:
-    handler = logging.StreamHandler(sys.stdout)
-    handler.setFormatter(JsonFormatter())
+def configure_logging(level: str = "INFO", log_file: str | None = None) -> None:
+    """JSON logs to stdout, and additionally (appended) to ``log_file`` when set. Both are redacted."""
+    formatter = JsonFormatter()
+    handlers: list[logging.Handler] = [logging.StreamHandler(sys.stdout)]
+    if log_file:
+        path = Path(log_file)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        handlers.append(logging.FileHandler(path, mode="a", encoding="utf-8"))
     root = logging.getLogger()
-    root.handlers[:] = [handler]
+    for old in root.handlers:
+        old.close()
+    for handler in handlers:
+        handler.setFormatter(formatter)
+    root.handlers[:] = handlers
     root.setLevel(level.upper())
     # httpx logs full request URLs at INFO (the Telegram URL contains the bot token). Keep it quiet.
     for noisy in ("httpx", "httpcore"):
