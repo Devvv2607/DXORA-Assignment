@@ -1,0 +1,30 @@
+[project]
+name = "automated-posting"
+version = "1.0.0"
+description = "FastAPI service that publishes one CTA message to multiple platforms via their official APIs."
+requires-python = ">=3.11"
+
+[tool.ruff]
+line-length = 130
+target-version = "py311"
+extend-exclude = [".venv"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "S", "ASYNC", "RUF", "SIM", "PT"]
+ignore = [
+    "S101",    # assert is fine in tests
+    "S311",    # random is used for retry jitter, not cryptography
+    "RUF001",  # unicode punctuation (…, —) is intentional
+    "RUF002",
+    "RUF003",
+    "RUF012",  # adapter metadata (required_env, expected_hosts) is declarative class config, never mutated
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S105", "S106", "S108"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+filterwarnings = ["error::pytest.PytestUnraisableExceptionWarning"]

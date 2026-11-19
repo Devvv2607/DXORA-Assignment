@@ -1,0 +1,32 @@
+# secrets
+.env
+.env.*
+!.env.example
+
+# python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+dist/
+build/
+*.egg-info/
+
+# raw live-run captures may contain account identifiers
+docs/evidence/*.raw
+
+# editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# local-only files: spec prompt and any backup of the old code
+prompt.md
+PROMPT.md
+original_backup/
+*_backup/
