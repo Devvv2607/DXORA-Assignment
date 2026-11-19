@@ -27,7 +27,7 @@ jobs:
           ruff check .
           ruff format --check .
       - name: Secret scan
-        run: bash scripts/check_no_secrets.sh
+        run: python scripts/check_no_secrets.py
       - name: Tests (all mocked, no network)
         run: pytest -q
 

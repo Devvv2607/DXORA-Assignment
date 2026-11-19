@@ -630,3 +630,37 @@ async def test_check_credentials_script_reports_each_platform(make_settings, cli
     assert rows[2] == ("GitHub Gist", False, "NOT_CONFIGURED: missing GITHUB_TOKEN")
     assert rows[3][2].startswith("NOT_CONFIGURED")  # optional adapter without credentials
     assert all(call.request.method == "GET" for call in mock_http.calls)
+
+
+# ------------------------------------------------------------------ scripts/check_no_secrets.py
+
+
+def test_secret_scanner_detects_token_shapes() -> None:
+    scanner = load_script("check_no_secrets")
+    samples = {
+        "Telegram bot token": "123456789:" + "A" * 35,
+        "GitHub token": "ghp_" + "a" * 36,
+        "private key": "-----BEGIN RSA " + "PRIVATE KEY-----",
+        "filled-in credential variable": "GITHUB_TOKEN=" + "x" * 12,
+    }
+    for name, text in samples.items():
+        assert (1, name) in scanner.scan_text(text), name
+    assert scanner.scan_text("message = 'Check out https://example.com'") == []
+
+
+def test_env_example_placeholders_do_not_match_secret_patterns() -> None:
+    from pathlib import Path
+
+    scanner = load_script("check_no_secrets")
+    text = (Path(__file__).resolve().parent.parent / ".env.example").read_text(encoding="utf-8")
+    assert scanner.scan_text(text) == []
+
+
+def test_secret_scanner_walk_mode_skips_dotenv(tmp_path) -> None:
+    scanner = load_script("check_no_secrets")
+    (tmp_path / ".env").write_text("TELEGRAM_BOT_TOKEN=123456789:" + "B" * 35 + "\n", encoding="utf-8")
+    (tmp_path / "clean.py").write_text("x = 1\n", encoding="utf-8")
+    assert scanner.scan(tmp_path) == []  # .env is never scanned (it is never committed)
+    (tmp_path / "leak.py").write_text("t = '123456789:" + "C" * 35 + "'\n", encoding="utf-8")
+    assert scanner.scan(tmp_path) == [("leak.py", 1, "Telegram bot token")]
+    assert scanner.main(["--root", str(tmp_path)]) == 1
