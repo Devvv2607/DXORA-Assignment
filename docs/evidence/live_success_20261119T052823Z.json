@@ -1,0 +1,55 @@
+{
+  "success": true,
+  "summary": {
+    "total": 5,
+    "succeeded": 5,
+    "failed": 0
+  },
+  "results": [
+    {
+      "platform": "Mastodon",
+      "status": "success",
+      "posted_url": "https://mastodon.social/@devvv26/117641452225837030",
+      "public_access": true,
+      "date": "2026-11-19",
+      "time": "05:28:24",
+      "error": null
+    },
+    {
+      "platform": "Bluesky",
+      "status": "success",
+      "posted_url": "https://bsky.app/profile/devvv26.bsky.social/post/3n2ndmt33w62x",
+      "public_access": true,
+      "date": "2026-11-19",
+      "time": "05:28:25",
+      "error": null
+    },
+    {
+      "platform": "Telegram",
+      "status": "success",
+      "posted_url": "https://t.me/dxora_test_channel/3",
+      "public_access": true,
+      "date": "2026-11-19",
+      "time": "05:28:25",
+      "error": null
+    },
+    {
+      "platform": "Dev.to",
+      "status": "success",
+      "posted_url": "https://dev.to/devvv2607/check-out-our-latest-business-platform-and-grow-your-online-4pe0",
+      "public_access": true,
+      "date": "2026-11-19",
+      "time": "05:28:24",
+      "error": null
+    },
+    {
+      "platform": "GitHub Gist",
+      "status": "success",
+      "posted_url": "https://gist.github.com/Devvv2607/ac85ebcdc68eb4ec162d407233109d2a",
+      "public_access": true,
+      "date": "2026-11-19",
+      "time": "05:28:25",
+      "error": null
+    }
+  ]
+}

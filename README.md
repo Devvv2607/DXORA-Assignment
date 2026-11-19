@@ -27,7 +27,7 @@
 | Platform research & integration (25) | [`docs/api_research.md`](docs/api_research.md), [`app/platforms/`](app/platforms/) (one file per platform, doc links at the top), [platform choice](#platforms-what-was-chosen-and-why), [`scripts/check_credentials.py`](scripts/check_credentials.py) |
 | Multi-platform posting (20) | [`app/services/posting_service.py`](app/services/posting_service.py) (concurrent, isolated, per-platform timeout and verification), [`app/services/public_check.py`](app/services/public_check.py), [`app/platforms/__init__.py`](app/platforms/__init__.py) registry |
 | Error handling (10) | [`app/core/errors.py`](app/core/errors.py), `_send`/`_map_status` in [`app/platforms/base.py`](app/platforms/base.py), [retry policy](#retry-and-idempotency-policy), [`docs/sample_responses.md`](docs/sample_responses.md) |
-| Code quality & documentation (15) | ruff (lint + format) clean; 175 offline tests; CI in [`.github/workflows/ci.yml`](.github/workflows/ci.yml); this README; [`docs/`](docs/) |
+| Code quality & documentation (15) | ruff (lint + format) clean; 184 offline tests; CI in [`.github/workflows/ci.yml`](.github/workflows/ci.yml); this README; [`docs/`](docs/) |
 
 ---
 
@@ -464,7 +464,7 @@ This means a retry can never create a duplicate post. Bluesky's cached session t
 ## Testing
 
 ```bash
-pytest -q                                  # 175 tests, ~4 s, fully offline
+pytest -q                                  # 184 tests, ~4 s, fully offline
 ruff check . && ruff format --check .
 python scripts/check_no_secrets.py
 ```
@@ -539,23 +539,43 @@ trustworthy, and set `idempotent = True` only if the API honours an idempotency 
 
 ## Verification status: live vs mocked
 
-| Integration | Mocked tests | Live run |
-|---|---|---|
-| Mastodon | ✅ | ⬜ pending: needs credentials |
-| Bluesky | ✅ | ⬜ pending: needs credentials |
-| Telegram | ✅ | ⬜ pending: needs credentials |
-| Dev.to | ✅ | ⬜ pending: needs credentials |
-| GitHub Gist | ✅ | ⬜ pending: needs credentials |
-| WordPress / LinkedIn / Discord (optional) | ✅ | not run |
-
 **Rule:** a platform is marked "verified live" **only** if an evidence JSON in [`docs/evidence/`](docs/evidence/)
-shows `status: "success"` for it, and the `public_access` value shown here must match that JSON exactly.
+shows `status: "success"` for it, and the `public_access` value shown here is copied exactly from that JSON.
 
-Live runs need real accounts and tokens, which are not part of this repository. To produce evidence:
+| Integration | Mocked tests | Live run (evidence: `live_success_20261119T052823Z.json`) | `public_access` (from that JSON) |
+|---|---|---|---|
+| Mastodon | ✅ | ✅ verified live (`status: "success"`) | `true` |
+| Bluesky | ✅ | ✅ verified live (`status: "success"`) | `true` |
+| Telegram | ✅ | ✅ verified live (`status: "success"`) | `true` |
+| Dev.to | ✅ | ✅ verified live (`status: "success"`) | `true` |
+| GitHub Gist | ✅ | ✅ verified live (`status: "success"`) | `true` |
+| WordPress / LinkedIn / Discord (optional) | ✅ | not run | – |
+
+### Evidence files
+
+| File | What it shows |
+|---|---|
+| [`live_success_20261119T052823Z.json`](docs/evidence/live_success_20261119T052823Z.json) + [`.log`](docs/evidence/live_success_20261119T052823Z.log) | Live run on 2026-11-19 05:28 UTC: `summary` 5/5 succeeded; all five `public_access: true` |
+| [`partial_failure_20261119T051855Z.json`](docs/evidence/partial_failure_20261119T051855Z.json) + [`.log`](docs/evidence/partial_failure_20261119T051855Z.log) | Earlier live run on 2026-11-19 05:18 UTC: 4/5 succeeded; GitHub Gist failed with `AUTH_FAILED: GitHub Gist rejected the credentials (HTTP 403): Resource not accessible by personal access token` |
+
+**About the partial-failure run.** It was **not** a staged demo with a deliberately wrong key. It was an
+**accidental, real permission error**: the first GitHub token was a fine-grained token without the
+*Gists: Read and write* permission, so GitHub refused to create the gist. Mastodon, Bluesky, Telegram and Dev.to
+were unaffected: they published, were verified publicly, and the response was still HTTP 200 with
+`summary.failed = 1`. That is the platform isolation the service is designed for. The files were renamed from
+`live_success_…` to `partial_failure_…` without changing their contents. The token was then replaced by a classic
+token with the `gist` scope, confirmed with `scripts/check_credentials.py` (all five `OK`), and the run above was made.
+
+As a second check alongside `public_access`, an unauthenticated GET (no credentials or cookies) of each `posted_url`
+from the successful run returned **HTTP 200** for all five. For Bluesky and Telegram that plain GET is weak evidence:
+`bsky.app` is a client-rendered app and `t.me/<channel>/<id>` returns 200 even for missing posts. That is why the
+service's own `public_access` check uses the Bluesky public AppView API and the `t.me/s/<channel>` preview instead.
+
+To reproduce (publishes real posts; use test accounts):
 
 ```bash
 python scripts/check_credentials.py                 # all OK first
 python scripts/live_run.py --label live_success     # with the server running and LOG_FILE set
 ```
 
-Then add one screenshot per `posted_url`, opened in a private window, to `docs/evidence/screenshots/`.
+Screenshots of each `posted_url`, opened in a private window, go in `docs/evidence/screenshots/`.

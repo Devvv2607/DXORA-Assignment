@@ -1,0 +1,55 @@
+{
+  "success": true,
+  "summary": {
+    "total": 5,
+    "succeeded": 4,
+    "failed": 1
+  },
+  "results": [
+    {
+      "platform": "Mastodon",
+      "status": "success",
+      "posted_url": "https://mastodon.social/@devvv26/117641415013121753",
+      "public_access": true,
+      "date": "2026-11-19",
+      "time": "05:18:56",
+      "error": null
+    },
+    {
+      "platform": "Bluesky",
+      "status": "success",
+      "posted_url": "https://bsky.app/profile/devvv26.bsky.social/post/3n2nd3voorh27",
+      "public_access": true,
+      "date": "2026-11-19",
+      "time": "05:18:57",
+      "error": null
+    },
+    {
+      "platform": "Telegram",
+      "status": "success",
+      "posted_url": "https://t.me/dxora_test_channel/2",
+      "public_access": true,
+      "date": "2026-11-19",
+      "time": "05:18:57",
+      "error": null
+    },
+    {
+      "platform": "Dev.to",
+      "status": "success",
+      "posted_url": "https://dev.to/devvv2607/check-out-our-latest-business-platform-and-grow-your-online-dah",
+      "public_access": true,
+      "date": "2026-11-19",
+      "time": "05:18:56",
+      "error": null
+    },
+    {
+      "platform": "GitHub Gist",
+      "status": "failed",
+      "posted_url": null,
+      "public_access": false,
+      "date": null,
+      "time": null,
+      "error": "AUTH_FAILED: GitHub Gist rejected the credentials (HTTP 403): Resource not accessible by personal access token"
+    }
+  ]
+}
