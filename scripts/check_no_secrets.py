@@ -3,7 +3,8 @@
 Usage:  python scripts/check_no_secrets.py [--root PATH]
 
 Scans tracked + untracked-but-not-ignored files (via git), or the whole tree minus the usual ignored
-paths when git is unavailable. ``.env.example`` is excluded. Prints ``file:line`` only, never the match.
+paths when git is unavailable. ``.env.example`` IS scanned: its placeholders must stay empty, so a template
+filled in by mistake fails the scan. Prints ``file:line`` only, never the match.
 """
 
 from __future__ import annotations
@@ -26,15 +27,17 @@ PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     ("hard-coded bearer token", re.compile(r"Bearer [A-Za-z0-9._~+/-]{30,}")),
     (
         "filled-in credential variable",
+        # Any non-empty value for a secret variable (also `KEY= value`, `KEY="value"`, `export KEY=value`).
+        # `KEY=`, `KEY=""` and `KEY=  # comment` pass, which is what .env.example must look like.
         re.compile(
-            r"^\s*(?:MASTODON_ACCESS_TOKEN|BLUESKY_APP_PASSWORD|TELEGRAM_BOT_TOKEN|DEVTO_API_KEY|GITHUB_TOKEN|"
-            r"WP_APP_PASSWORD|LINKEDIN_ACCESS_TOKEN|DISCORD_WEBHOOK_URL|API_KEY)=[^\s#]+",
+            r"^[ \t]*(?:export[ \t]+)?(?:MASTODON_ACCESS_TOKEN|BLUESKY_APP_PASSWORD|TELEGRAM_BOT_TOKEN|DEVTO_API_KEY|"
+            r"GITHUB_TOKEN|WP_APP_PASSWORD|LINKEDIN_ACCESS_TOKEN|DISCORD_WEBHOOK_URL|API_KEY)=[ \t]*[\"']?[^\s#\"']",
             re.MULTILINE,
         ),
     ),
 ]
 
-EXCLUDED_FILES = {".env.example", "scripts/check_no_secrets.py"}
+EXCLUDED_FILES = {"scripts/check_no_secrets.py"}  # .env.example is scanned on purpose
 _WALK_SKIP_DIRS = {".git", ".venv", "venv", "__pycache__", ".pytest_cache", ".ruff_cache", "logs", "node_modules"}
 _MAX_BYTES = 2_000_000
 

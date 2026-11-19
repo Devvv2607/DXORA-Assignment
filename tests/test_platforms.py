@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 
 import httpx
 import pytest
@@ -664,3 +665,43 @@ def test_secret_scanner_walk_mode_skips_dotenv(tmp_path) -> None:
     (tmp_path / "leak.py").write_text("t = '123456789:" + "C" * 35 + "'\n", encoding="utf-8")
     assert scanner.scan(tmp_path) == [("leak.py", 1, "Telegram bot token")]
     assert scanner.main(["--root", str(tmp_path)]) == 1
+
+
+def _template_text() -> str:
+    from pathlib import Path
+
+    return (Path(__file__).resolve().parent.parent / ".env.example").read_text(encoding="utf-8")
+
+
+def test_clean_env_example_template_passes_full_scan(tmp_path) -> None:
+    scanner = load_script("check_no_secrets")
+    (tmp_path / ".env.example").write_text(_template_text(), encoding="utf-8")
+    assert scanner.scan(tmp_path) == []  # .env.example is scanned, and the shipped template is clean
+
+
+@pytest.mark.parametrize(
+    "filled_line",
+    [
+        "DEVTO_API_KEY=abc123",  # plain non-empty value, no token shape
+        'GITHUB_TOKEN="some-value"',  # quoted
+        "MASTODON_ACCESS_TOKEN= spaced-value",  # space after =
+        "export BLUESKY_APP_PASSWORD=value",  # shell export
+        "TELEGRAM_BOT_TOKEN=123456789:" + "A" * 35,  # token-shaped value
+    ],
+)
+def test_filled_in_env_example_fails_scan(tmp_path, filled_line) -> None:
+    scanner = load_script("check_no_secrets")
+    name = filled_line.removeprefix("export ").split("=", 1)[0]
+    text = re.sub(rf"^{name}=.*$", filled_line, _template_text(), count=1, flags=re.MULTILINE)
+    assert filled_line in text
+    (tmp_path / ".env.example").write_text(text, encoding="utf-8")
+    findings = scanner.scan(tmp_path)
+    assert findings
+    assert {rel for rel, _, _ in findings} == {".env.example"}
+    assert scanner.main(["--root", str(tmp_path)]) == 1
+
+
+@pytest.mark.parametrize("empty_line", ["DEVTO_API_KEY=", 'DEVTO_API_KEY=""', "DEVTO_API_KEY=   # set me"])
+def test_empty_secret_values_pass(empty_line) -> None:
+    scanner = load_script("check_no_secrets")
+    assert scanner.scan_text(empty_line + "\n") == []
